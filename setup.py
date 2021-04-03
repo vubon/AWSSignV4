@@ -49,12 +49,9 @@ setup(
         'requests'
     ],
     classifiers=[
-        'Development Status :: 1 - Alpha',  # 2 - Pre-Alpha, 3 - Alpha, 4 - Beta, 5 - Production/Stable
         "License :: OSI Approved :: MIT License",
         "Environment :: Web Environment",
         "Intended Audience :: Developers",
-        "Intended Audience :: Web Developers",
-        "Intended Audience :: Cloud",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
@@ -63,8 +60,5 @@ setup(
         "Operating System :: OS Independent",
         "Natural Language :: English",
         "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Authentication",
-        "Topic :: HTTP",
-        "Topic :: AWS :: Signature4"
     ]
 )

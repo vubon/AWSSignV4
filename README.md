@@ -7,8 +7,7 @@ you can use AWS services. more detail visit on [AWS](https://docs.amazonaws.cn/e
 | Name                                 | status     
 | ---                                  | ---        
 | AWS IoT Core                         | `done`       
-| AWS EC2                              | `Comming`      
-| Hourly                               | `done`     
+| AWS EC2                              | `Comming`    
 
 
 
