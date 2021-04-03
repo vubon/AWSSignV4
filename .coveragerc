@@ -1,0 +1,16 @@
+[run]
+source = .
+branch = False
+timid = True
+omit = venv/*
+[report]
+show_missing = True
+include = *.py
+omit =
+    setup.py
+    AWSSignV4/__version__.py
+    AWSSignV4/__init__.py
+    tests/*.py
+    */site-packages/*
+[html]
+title = Code Coverage
