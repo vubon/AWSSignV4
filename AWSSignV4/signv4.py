@@ -83,7 +83,11 @@ class SignV4:
         """
         content_type = headers.get("content-type", _DEFAULT_CONTENT_TYPE)
         host = headers.get("host")
-        return ['content-type:' + content_type + '\n' + 'host:' + host + '\n' + 'x-amz-date:' + self.amz_date + '\n']
+        return [
+            f'content-type:{content_type}\n',
+            f'host:{host}\n',
+            f'x-amz-date:{self.amz_date}\n'
+        ]
 
     def get_canonical_request(self, **kwargs: dict) -> str:
         """Creates the canonical request string as per AWS Signature Version 4.
@@ -119,7 +123,7 @@ class SignV4:
         Format: YYYYMMDD/region/service/aws4_request
         :return: str: The credential scope string.
         """
-        return self.date_stamp + "/" + self.aws_region + "/" + self.aws_service + "/" + _AWS_REQUEST
+        return f"{self.date_stamp}/{self.aws_region}/{self.aws_service}/{_AWS_REQUEST}"
 
     def string_to_sign(self, **kwargs) -> str:
         """Creates the 'string to sign' for AWS Signature Version 4.
@@ -131,8 +135,7 @@ class SignV4:
         """
         credential_scope = self.get_credential_scope()
         canonical_request = self.get_canonical_request(**kwargs)
-        return _AWS_ALGORITHM + "\n" + self.amz_date + "\n" + credential_scope + "\n" + self.hash_sha256(
-            canonical_request)
+        return f"{_AWS_ALGORITHM}\n{self.amz_date}\n{credential_scope}\n{self.hash_sha256(canonical_request)}"
 
     def signature(self, **kwargs):
         """Computes the AWS Signature Version 4.
@@ -152,10 +155,14 @@ class SignV4:
                        and 'Authorization' headers.
         """
         credential_scope = self.get_credential_scope()
-        first_part = _AWS_ALGORITHM + " " + "Credential=" + self._aws_access_key + "/" + credential_scope
-        second_part = ', SignedHeaders=' + self._signed_headers + ", " + 'Signature=' + self.signature(**kwargs)
+        credential_part = f"{self._aws_access_key}/{credential_scope}"
+        authorization_string = (
+            f"{_AWS_ALGORITHM} Credential={credential_part}, "
+            f"SignedHeaders={self._signed_headers}, "
+            f"Signature={self.signature(**kwargs)}"
+        )
         return {
             'Content-Type': _DEFAULT_CONTENT_TYPE,
             'X-Amz-Date': self.amz_date,
-            'Authorization': first_part + second_part,
+            'Authorization': authorization_string,
         }
