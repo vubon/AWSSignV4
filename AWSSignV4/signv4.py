@@ -17,6 +17,14 @@ class SignV4:
     """
 
     def __init__(self, aws_access_key: str, aws_secret_key: str, aws_region: str, aws_service: str, date_time):
+        """Initializes the SignV4 class with AWS credentials and service information.
+        :param aws_access_key: str: The AWS access key ID.
+        :param aws_secret_key: str: The AWS secret access key.
+        :param aws_region: str: The AWS region for the service (e.g., 'us-east-1').
+        :param aws_service: str: The AWS service name (e.g., 's3', 'execute-api').
+        :param date_time: datetime: A datetime object representing the current time,
+                                    used for generating timestamps in the signature. Must be UTC.
+        """
         self._signed_headers = 'content-type;host;x-amz-date'
         self._aws_access_key = aws_access_key
         self._aws_secret_key = aws_secret_key
@@ -27,9 +35,9 @@ class SignV4:
 
     @staticmethod
     def hash_sha256(message: str) -> str:
-        """
-        :param message:
-        :return:
+        """Computes the SHA256 hash of a given string.
+        :param message: str: The string to hash.
+        :return: str: The hex-encoded SHA256 hash of the message.
         """
         return hashlib.sha256(message.encode('utf-8')).hexdigest()
 
@@ -45,8 +53,10 @@ class SignV4:
         return hmac.new(key=key, msg=message.encode('utf-8'), digestmod=hashlib.sha256).digest()
 
     def get_signature_key(self) -> bytes:
-        """
-        :return:
+        """Derives the AWS Signature Version 4 signing key.
+        The key is derived from the AWS secret access key and scoped to the date,
+        region, and service. This key is used to sign the 'string to sign'.
+        :return: bytes: The derived signing key.
         """
         return self.sign(
             key=self.sign(
@@ -62,74 +72,97 @@ class SignV4:
         )
 
     def get_canonical_headers(self, headers: dict) -> list:
-        """
-        :param headers:
-        :return:
+        """Constructs the canonical headers string.
+        Only 'content-type', 'host', and 'x-amz-date' headers are included.
+        Headers are lowercased, and their values are trimmed.
+        :param headers: dict: A dictionary containing request headers. Expected keys
+                              are "host" and optionally "content-type".
+        :return: list: A list of strings, where each string is a canonical header
+                       entry in the format 'header_name:header_value\n'.
+                       Example: ['content-type:application/json\n', 'host:example.com\n', ...]
         """
         content_type = headers.get("content-type", _DEFAULT_CONTENT_TYPE)
         host = headers.get("host")
-        return ['content-type:' + content_type + '\n' + 'host:' + host + '\n' + 'x-amz-date:' + self.amz_date + '\n']
+        return [
+            f'content-type:{content_type}\n',
+            f'host:{host}\n',
+            f'x-amz-date:{self.amz_date}\n'
+        ]
 
     def get_canonical_request(self, **kwargs: dict) -> str:
-        """
-        :param kwargs:
-         canonical = {
-            "headers": {
-                "content-type": "application/json",
-                "host": "hello.com",
-                "date": "datetime object UTC format"
-            },
-            "method": "POST",
-            "payload": {"content": "hello world"},
-            "canonical_uri": "hello/test",
-            "canonical_querystring": "qos=1"
-        }
-        :return:
+        """Creates the canonical request string as per AWS Signature Version 4.
+        The canonical request is a standardized representation of the request
+        components, which is then hashed and included in the 'string to sign'.
+        :param kwargs: dict: Keyword arguments containing the components of the request:
+            - "method": str: The HTTP method (e.g., "POST", "GET").
+            - "canonical_uri": str: The URI-encoded version of the absolute path component of the URI.
+            - "canonical_querystring": str: The URL-encoded query string parameters.
+            - "headers": dict: Request headers, must include "host" and optionally "content-type".
+            - "payload": str: The payload of the request body. For GET, this is an empty string.
+        :return: str: The canonical request string.
         """
         headers = kwargs.pop("headers")
         payload = kwargs.pop("payload")
-        payload_hash = [self.hash_sha256(payload)]
-        canonical_headers = self.get_canonical_headers(headers)
 
-        _request = []
-        for key, value in kwargs.items():
-            _request.append(value)
+        method = kwargs["method"]
+        uri = kwargs["canonical_uri"]
+        qs = kwargs["canonical_querystring"]
 
-        canonical_request = _request + canonical_headers + [self._signed_headers] + payload_hash
-        return "\n".join([str(item) for item in canonical_request])
+        # canonical_headers_string is 'h1:v1\nh2:v2\n...\n'
+        canonical_headers_string = "".join(self.get_canonical_headers(headers))
+
+        signed_headers_str = self._signed_headers
+        payload_hash_str = self.hash_sha256(payload)
+
+        return f"{method}\n{uri}\n{qs}\n{canonical_headers_string}{signed_headers_str}\n{payload_hash_str}"
 
     def get_credential_scope(self) -> str:
+        """Generates the credential scope string.
+        The credential scope limits the validity of the signature to a specific date,
+        region, and service.
+        Format: YYYYMMDD/region/service/aws4_request
+        :return: str: The credential scope string.
         """
-        :return:
-        """
-        return self.date_stamp + "/" + self.aws_region + "/" + self.aws_service + "/" + _AWS_REQUEST
+        return f"{self.date_stamp}/{self.aws_region}/{self.aws_service}/{_AWS_REQUEST}"
 
     def string_to_sign(self, **kwargs) -> str:
-        """
-        :param kwargs:
-        :return:
+        """Creates the 'string to sign' for AWS Signature Version 4.
+        This string includes the algorithm, request timestamp, credential scope,
+        and a hash of the canonical request.
+        :param kwargs: dict: Arguments passed to `get_canonical_request` to generate
+                             the canonical request hash.
+        :return: str: The complete string to be signed.
         """
         credential_scope = self.get_credential_scope()
         canonical_request = self.get_canonical_request(**kwargs)
-        return _AWS_ALGORITHM + "\n" + self.amz_date + "\n" + credential_scope + "\n" + self.hash_sha256(
-            canonical_request)
+        return f"{_AWS_ALGORITHM}\n{self.amz_date}\n{credential_scope}\n{self.hash_sha256(canonical_request)}"
 
     def signature(self, **kwargs):
-        """
-        :return:
+        """Computes the AWS Signature Version 4.
+        The signature is calculated by signing the 'string to sign' with the derived
+        signing key using HMAC-SHA256.
+        :param kwargs: dict: Arguments passed to `string_to_sign`.
+        :return: str: The hex-encoded signature.
         """
         return hmac.new(self.get_signature_key(), self.string_to_sign(**kwargs).encode('utf-8'),
                         hashlib.sha256).hexdigest()
 
     def authorization_header(self, **kwargs) -> dict:
-        """
-        :return:
+        """Constructs the HTTP Authorization header string for AWS Signature Version 4.
+        This header contains the access key, credential scope, signed headers, and the signature.
+        :param kwargs: dict: Arguments passed to `signature` to compute the signature.
+        :return: dict: A dictionary containing the 'Content-Type', 'X-Amz-Date',
+                       and 'Authorization' headers.
         """
         credential_scope = self.get_credential_scope()
-        first_part = _AWS_ALGORITHM + " " + "Credential=" + self._aws_access_key + "/" + credential_scope
-        second_part = ', SignedHeaders=' + self._signed_headers + ", " + 'Signature=' + self.signature(**kwargs)
+        credential_part = f"{self._aws_access_key}/{credential_scope}"
+        authorization_string = (
+            f"{_AWS_ALGORITHM} Credential={credential_part}, "
+            f"SignedHeaders={self._signed_headers}, "
+            f"Signature={self.signature(**kwargs)}"
+        )
         return {
-            'Content-Type': "application/x-amz-json-1.0",
+            'Content-Type': _DEFAULT_CONTENT_TYPE,
             'X-Amz-Date': self.amz_date,
-            'Authorization': first_part + second_part,
+            'Authorization': authorization_string,
         }
